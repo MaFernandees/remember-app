@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#0a0a0f"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Remember"/>
+  <link rel="manifest" href="manifest.json"/>
+  <title>Remember — Seu Assistente Pessoal</title>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { min-height: 100vh; background: #0a0a0f; font-family: 'Georgia', serif; color: #e8e0d0; overflow-x: hidden; }
+    body::before { content: ''; position: fixed; inset: 0; z-index: 0; background: radial-gradient(ellipse at 20% 20%, #1a1025 0%, transparent 60%), radial-gradient(ellipse at 80% 80%, #0d1a2e 0%, transparent 60%); pointer-events: none; }
+    .container { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; padding: 36px 20px 100px; }
+    .header { text-align: center; margin-bottom: 40px; }
+    .header .sub { font-size: 10px; letter-spacing: 0.3em; color: #c8a96e; text-transform: uppercase; margin-bottom: 10px; }
+    .header h1 { font-size: 56px; font-weight: 400; letter-spacing: -0.02em; color: #f0e8d8; line-height: 1; }
+    .header .line { width: 60px; height: 1px; background: linear-gradient(90deg, transparent, #c8a96e, transparent); margin: 14px auto; }
+    .header p { color: #8a8070; font-size: 14px; font-style: italic; }
+    .mic-area { text-align: center; margin-bottom: 32px; }
+    .mic-outer { display: inline-flex; align-items: center; justify-content: center; width: 100px; height: 100px; border-radius: 50%; background: rgba(200,169,110,0.06); border: 1.5px solid rgba(200,169,110,0.2); cursor: pointer; transition: all 0.3s; position: relative; }
+    .mic-outer:hover { background: rgba(200,169,110,0.1); }
+    .mic-outer.listening { background: rgba(200,80,80,0.15); border-color: rgba(220,80,80,0.6); animation: micPulse 1.5s infinite; }
+    .mic-outer.listening::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; border: 1px solid rgba(220,80,80,0.3); animation: ripple 1.5s infinite; }
+    .mic-outer.listening::after { content: ''; position: absolute; inset: -16px; border-radius: 50%; border: 1px solid rgba(220,80,80,0.15); animation: ripple 1.5s infinite 0.3s; }
+    @keyframes micPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+    @keyframes ripple { 0%{transform:scale(0.8);opacity:1} 100%{transform:scale(1.3);opacity:0} }
+    .mic-icon { font-size: 36px; line-height: 1; }
+    .mic-status { margin-top: 14px; font-size: 13px; color: #8a8070; font-style: italic; min-height: 20px; transition: all 0.3s; }
+    .mic-status.active { color: #c8a96e; }
+    .mic-status.listening { color: #e07070; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .transcript-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(200,169,110,0.15); border-radius: 14px; padding: 16px 20px; margin-bottom: 12px; min-height: 60px; display: flex; align-items: center; gap: 12px; }
+    .transcript-box textarea { flex: 1; background: transparent; border: none; outline: none; color: #e8e0d0; font-size: 16px; font-family: 'Georgia', serif; resize: none; line-height: 1.5; font-style: italic; }
+    .transcript-box textarea::placeholder { color: #3a3028; font-style: italic; }
+    .send-btn { background: linear-gradient(135deg, #c8a96e, #a07840); border: none; border-radius: 8px; color: #0a0a0f; font-size: 13px; font-weight: 600; padding: 8px 16px; cursor: pointer; font-family: 'Georgia', serif; white-space: nowrap; transition: all 0.2s; flex-shrink: 0; }
+    .send-btn:disabled { background: rgba(200,169,110,0.2); color: #5a5040; cursor: not-allowed; }
+    .feedback { border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; font-size: 14px; }
+    .feedback.error { background: rgba(220,80,80,0.1); border: 1px solid rgba(220,80,80,0.3); color: #e07070; }
+    .feedback.success { background: rgba(100,200,120,0.1); border: 1px solid rgba(100,200,120,0.3); color: #80c890; }
+    .feedback.info { background: rgba(200,169,110,0.08); border: 1px solid rgba(200,169,110,0.2); color: #c8a96e; }
+    .install-banner { background: rgba(200,169,110,0.08); border: 1px solid rgba(200,169,110,0.25); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+    .install-banner .install-text { flex: 1; font-size: 13px; color: #c8a96e; }
+    .install-banner .install-btn { background: linear-gradient(135deg, #c8a96e, #a07840); border: none; border-radius: 8px; color: #0a0a0f; font-size: 12px; font-weight: 600; padding: 7px 14px; cursor: pointer; font-family: 'Georgia', serif; white-space: nowrap; }
+    .reminders { margin-top: 36px; }
+    .section-title { font-size: 11px; color: #5a5040; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 16px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: #5a5040; font-size: 12px; padding: 8px 14px; cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase; font-family: 'Georgia', serif; transition: all 0.2s; margin-bottom: -1px; }
+    .tab-btn.active { border-bottom-color: #c8a96e; color: #c8a96e; }
+    .reminder-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 16px 18px; display: flex; align-items: flex-start; gap: 14px; margin-bottom: 10px; position: relative; overflow: hidden; animation: fadeIn 0.3s ease; }
+    .reminder-card.today { border-color: rgba(200,169,110,0.35); }
+    .reminder-card.today::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #c8a96e, transparent); }
+    .reminder-emoji { font-size: 26px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+    .reminder-content { flex: 1; min-width: 0; }
+    .reminder-task { font-size: 15px; color: #e8e0d0; margin-bottom: 5px; font-style: italic; }
+    .reminder-meta { display: flex; gap: 10px; flex-wrap: wrap; }
+    .reminder-meta span { font-size: 11px; color: #8a8070; }
+    .reminder-meta .today-color { color: #c8a96e; }
+    .reminder-meta .notif-color { color: #6a9070; }
+    .delete-btn { background: transparent; border: none; color: #3a3028; cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1; flex-shrink: 0; transition: color 0.2s; }
+    .delete-btn:hover, .delete-btn:active { color: #e07070; }
+    .empty { text-align: center; color: #5a5040; font-size: 14px; padding: 40px 0; font-style: italic; }
+    .examples { margin-bottom: 32px; }
+    .examples-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .example-btn { background: rgba(200,169,110,0.06); border: 1px solid rgba(200,169,110,0.15); border-radius: 20px; padding: 7px 14px; color: #a09070; font-size: 12px; cursor: pointer; font-family: 'Georgia', serif; transition: all 0.2s; }
+    .example-btn:hover, .example-btn:active { border-color: rgba(200,169,110,0.4); }
+    .footer { text-align: center; margin-top: 60px; color: #3a3028; font-size: 11px; letter-spacing: 0.15em; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(200,169,110,0.2); border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="sub">seu assistente pessoal</div>
+    <h1>Remember</h1>
+    <div class="line"></div>
+    <p>Fale naturalmente. Nós cuidamos do resto.</p>
+  </div>
+
+  <div id="notifBanner" style="display:none;background:rgba(200,100,80,0.12);border:1px solid rgba(220,120,80,0.35);border-radius:12px;padding:14px 18px;margin-bottom:16px;align-items:center;gap:12px;">
+    <div style="flex:1;font-size:13px;color:#e8a080;">🔔 Ative as notificações para receber seus lembretes no celular!</div>
+    <button onclick="ativarNotificacoes()" style="background:linear-gradient(135deg,#c8a96e,#a07840);border:none;border-radius:8px;color:#0a0a0f;font-size:12px;font-weight:600;padding:7px 14px;cursor:pointer;font-family:Georgia,serif;white-space:nowrap;">Ativar</button>
+  </div>
+
+  <div id="emailBanner" style="display:none;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);border-radius:12px;padding:14px 18px;margin-bottom:16px;">
+    <div style="font-size:11px;color:#c8a96e;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:10px;">📧 Receber lembretes por email (opcional)</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <input id="userEmail" type="email" placeholder="seu@email.com" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(200,169,110,0.2);border-radius:8px;padding:9px 14px;color:#e8e0d0;font-size:14px;font-family:Georgia,serif;outline:none;"/>
+      <button onclick="salvarEmail()" style="background:linear-gradient(135deg,#c8a96e,#a07840);border:none;border-radius:8px;color:#0a0a0f;font-size:12px;font-weight:600;padding:9px 16px;cursor:pointer;font-family:Georgia,serif;white-space:nowrap;">Salvar</button>
+    </div>
+    <div style="font-size:11px;color:#5a5040;margin-top:8px;">Deixe em branco para receber só as notificações no celular.</div>
+  </div>
+
+  <div id="installBanner" style="display:none" class="install-banner">
+    <div class="install-text">📱 Instale o Remember na sua tela inicial!</div>
+    <button class="install-btn" onclick="installApp()">Instalar</button>
+  </div>
+
+  <div class="mic-area">
+    <div class="mic-outer" id="micBtn" onclick="toggleMic()">
+      <span class="mic-icon" id="micIcon">🎙️</span>
+    </div>
+    <div class="mic-status" id="micStatus">Toque para falar</div>
+  </div>
+
+  <div class="transcript-box">
+    <textarea id="inputText" rows="2" placeholder='Ou digite aqui... Ex: "Reunião amanhã às 10h, me lembra às 8h"'></textarea>
+    <button class="send-btn" id="saveBtn" onclick="handleSubmit()">Salvar</button>
+  </div>
+
+  <div id="feedback"></div>
+
+  <div class="examples" id="examplesSection">
+    <div class="section-title">Experimente dizer</div>
+    <div class="examples-list">
+      <button class="example-btn" onclick="setExample('Consulta no médico dia 29 de junho')">🏥 Consulta no médico dia 29 de junho</button>
+      <button class="example-btn" onclick="setExample('Ligar para minha mãe hoje à noite')">📞 Ligar para minha mãe hoje à noite</button>
+      <button class="example-btn" onclick="setExample('Reunião de trabalho amanhã às 10h')">💼 Reunião amanhã às 10h</button>
+      <button class="example-btn" onclick="setExample('Aniversário da Maria dia 10 de julho, me lembra um dia antes')">🎂 Aniversário da Maria dia 10 de julho</button>
+    </div>
+  </div>
+
+  <div class="reminders" id="remindersSection" style="display:none">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="setTab('all')" id="tab-all">Todos <span id="count"></span></button>
+      <button class="tab-btn" onclick="setTab('today')" id="tab-today">Hoje</button>
+      <button class="tab-btn" onclick="setTab('upcoming')" id="tab-upcoming">Próximos</button>
+    </div>
+    <div id="remindersList"></div>
+  </div>
+
+  <div style="text-align:center;margin-top:32px;margin-bottom:16px;">
+    <button onclick="testeNotificacao()" style="background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.2);border-radius:10px;color:#c8a96e;font-size:12px;padding:8px 20px;cursor:pointer;font-family:Georgia,serif;">
+      🔔 Testar notificação agora
+    </button>
+  </div>
+  <div class="footer">REMEMBER © 2026 — ideia original de Marcos &nbsp;·&nbsp; <span id="appVer" style="color:#5a5040"></span></div>
+</div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────
+  const EMAILJS_SERVICE_ID = "service_5i39okf";
+  const EMAILJS_TEMPLATE_ID = "template_3u1kvpl";
+  const EMAILJS_PUBLIC_KEY = "hXMuutB2YbFiKZRd9";
+  emailjs.init(EMAILJS_PUBLIC_KEY);
+
+  const SERVER_URL = "https://remember-server-zuvg.onrender.com";
+  const VAPID_KEY = "BGOAHouwntDKP1efv8zsURVxpokIW2xgwEO7QKvs_SB8MVC6el8q7kssMSMuyzeamU9wVy2KZfO-L4vo6aF_36k";
+
+  function getUserId() {
+    let id = localStorage.getItem("remember_user_id");
+    if (!id) { id = "user_" + Date.now() + "_" + Math.random().toString(36).slice(2); localStorage.setItem("remember_user_id", id); }
+    return id;
+  }
+
+  async function registerPushNotifications() {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_KEY) });
+      const res = await fetch(SERVER_URL + "/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: getUserId(), subscription: sub.toJSON() }) });
+      if (res.ok) { localStorage.setItem("remember_push_registered", "true"); console.log("Web Push registrado!"); }
+    } catch(e) { console.error("Erro Web Push:", e); }
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
+
+  function getUserEmail() { return localStorage.getItem("remember_user_email") || ""; }
+
+  function salvarEmail() {
+    const email = document.getElementById("userEmail").value.trim();
+    if (email && !email.includes("@")) { setFeedback("Email inválido.", "error"); return; }
+    localStorage.setItem("remember_user_email", email);
+    document.getElementById("emailBanner").style.display = "none";
+    setFeedback(email ? "✓ Email salvo! Você receberá lembretes em " + email : "✓ Preferência salva!", "success");
+  }
+
+  function playNotificationSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.3].forEach(delay => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880; osc.type = "sine";
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + delay + 0.05);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + 0.3);
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.3);
+      });
+    } catch(e) {}
+  }
+
+  // ── STATE ───────────────────────────────────────────────
+  let reminders = JSON.parse(localStorage.getItem("remember_reminders") || "[]");
+  let timers = {}, activeTab = "all", isRecording = false, deferredPrompt = null;
+
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredPrompt = e; document.getElementById("installBanner").style.display = "flex"; });
+  function installApp() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(() => { deferredPrompt = null; document.getElementById("installBanner").style.display = "none"; }); } }
+
+  // ── SPEECH RECOGNITION ──────────────────────────────────
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function setMicUI(listening) {
+    const btn = document.getElementById("micBtn"), icon = document.getElementById("micIcon"), status = document.getElementById("micStatus");
+    if (listening) { btn.classList.add("listening"); icon.textContent = "⏹️"; status.className = "mic-status listening"; status.textContent = "🔴 Ouvindo... fale agora!"; }
+    else { btn.classList.remove("listening"); icon.textContent = "🎙️"; status.className = "mic-status"; status.textContent = "Toque para falar"; }
+  }
+
+  function createRecognition() {
+    if (!SpeechRecognition) return null;
+    const r = new SpeechRecognition();
+    r.lang = "pt-BR"; r.continuous = false; r.interimResults = true; r.maxAlternatives = 1;
+    r.onstart = () => { isRecording = true; setMicUI(true); setFeedback("", ""); };
+    r.onresult = (e) => { let t = ""; for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript; document.getElementById("inputText").value = t; };
+    r.onend = () => { isRecording = false; setMicUI(false); const text = document.getElementById("inputText").value.trim(); if (text) handleSubmit(); else setFeedback("Não ouvi nada. Tente novamente!", "error"); };
+    r.onerror = (e) => { isRecording = false; setMicUI(false); if (e.error === "not-allowed") setFeedback("Permissão do microfone negada.", "error"); else if (e.error === "no-speech") setFeedback("Não detectei fala. Tente novamente!", "error"); else setFeedback("Toque no microfone e tente novamente.", "error"); };
+    return r;
+  }
+
+  if (!SpeechRecognition) document.getElementById("micStatus").textContent = "Use Chrome para falar";
+
+  function toggleMic() {
+    if (!SpeechRecognition) { setFeedback("Use o Chrome ou Edge para usar o microfone.", "error"); return; }
+    if (isRecording) { if (window._currentRecognition) try { window._currentRecognition.stop(); } catch(e) {} isRecording = false; setMicUI(false); }
+    else { document.getElementById("inputText").value = ""; window._currentRecognition = createRecognition(); try { window._currentRecognition.start(); } catch(e) { setMicUI(false); setFeedback("Erro ao ativar microfone.", "error"); } }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // PARSER v6 — 100% JavaScript puro, sem bibliotecas externas
+  // Referência: hora local do device (GMT-3 para usuários BR)
+  // ════════════════════════════════════════════════════════════
+  const APP_VERSION = "6.0";
+  console.log("Remember v" + APP_VERSION + " ✓");
+
+  // ── Helpers de display ───────────────────────────────────
+  const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  function p2(n){ return String(Math.floor(n)).padStart(2,'0'); }
+  function localDateStr(d){ return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`; }
+  function localTimeStr(d){ return `${p2(d.getHours())}:${p2(d.getMinutes())}`; }
+  function todayBR()    { return localDateStr(new Date()); }
+  function tomorrowBR() { return localDateStr(new Date(Date.now()+86400000)); }
+  function formatDateBR(s) { const [y,m,d]=s.split("-"); return `${d} ${MONTHS[parseInt(m)-1]}, ${y}`; }
+  function getRelativeLabel(s) { if(s===todayBR())return"Hoje"; if(s===tomorrowBR())return"Amanhã"; return formatDateBR(s); }
+
+  function extractEmoji(text) {
+    const t=text.toLowerCase();
+    if(t.match(/médico|medico|consulta|hospital|saúde|saude|dentist/))return"🏥";
+    if(t.match(/aniversário|aniversario|festa|parabéns|parabens/))return"🎂";
+    if(t.match(/reunião|reuniao|meeting|trabalho|trabalhar/))return"💼";
+    if(t.match(/ligar|ligue|telefonar|telefon|chamar|call/))return"📞";
+    if(t.match(/comprar|mercado|supermercado|farmácia|farmacia|loja/))return"🛒";
+    if(t.match(/academia|exercício|exercicio|treino|correr|ginástica/))return"💪";
+    if(t.match(/estudo|estudar|aula|prova|escola|faculdade/))return"📚";
+    if(t.match(/viagem|viajar|voo|aeroporto|hotel/))return"✈️";
+    if(t.match(/pagar|pagamento|conta|boleto|banco/))return"💰";
+    return"🔔";
+  }
+
+  // ── Dicionários ───────────────────────────────────────────
+  const PT_NUM = {
+    'zero':0,'um':1,'uma':1,'dois':2,'duas':2,'três':3,'tres':3,'quatro':4,
+    'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,'onze':11,'doze':12,
+    'treze':13,'quatorze':14,'quinze':15,'dezesseis':16,'dezessete':17,
+    'dezoito':18,'dezenove':19,'vinte':20,'trinta':30,'quarenta':40,'meia':0.5
+  };
+  const MESES = {
+    'janeiro':1,'fevereiro':2,'março':3,'marco':3,'abril':4,'maio':5,
+    'junho':6,'julho':7,'agosto':8,'setembro':9,'outubro':10,'novembro':11,'dezembro':12
+  };
+  // dia da semana → 0=dom..6=sáb, ordenado por tamanho desc para match mais longo primeiro
+  const DIAS_SEMANA = [
+    ['segunda-feira',1],['terça-feira',2],['quarta-feira',3],['quinta-feira',4],['sexta-feira',5],
+    ['sábado',6],['sabado',6],['domingo',0],['segunda',1],['terça',2],['terca',2],
+    ['quarta',3],['quinta',4],['sexta',5]
+  ];
+  const FRAC = {'meia':30,'quinze':15,'vinte':20,'trinta':30,'quarenta':40};
+
+  function toNum(s) {
+    if (!s) return NaN;
+    const k = s.toLowerCase().trim();
+    return PT_NUM[k] !== undefined ? PT_NUM[k] : parseFloat(k.replace(',','.'));
+  }
+
+  // Aplica período do dia: h=10,'noite'→22; h=12,'noite'→0; h=1,'noite'→1(madrugada)
+  function applyPeriod(h, period) {
+    const p = period.toLowerCase();
+    if (p.includes('tarde'))                   return h===12 ? 12 : (h<12 ? h+12 : h);
+    if (p.includes('noite'))                   { if(h===12)return 0; return (h>=1&&h<=5)?h:(h<12?h+12:h); }
+    if (p.includes('manh')||p.includes('madrugada')) return h===12 ? 0 : h;
+    return h;
+  }
+
+  // ── Extrai instrução de notificação ──────────────────────
+  function extractNotifyMod(rawText) {
+    let text = rawText;
+    const pats = [
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?(?:na\s+v[eé]spera|um\s+dia\s+antes)\b/i,  {type:'daysBefore',days:1,label:'1 dia antes'}],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?dois\s+dias\s+antes\b/i,                    {type:'daysBefore',days:2,label:'2 dias antes'}],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+semana\s+antes\b/i,                   {type:'daysBefore',days:7,label:'1 semana antes'}],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+hora\s+antes\b/i,                     {type:'hoursBefore',hours:1,label:'1 hora antes'}],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?duas\s+horas\s+antes\b/i,                   {type:'hoursBefore',hours:2,label:'2 horas antes'}],
+    ];
+    for (const [pat, mod] of pats) {
+      if (pat.test(text)) { text=text.replace(pat,'').replace(/^\s*,?\s*/,'').trim(); return {text,mod}; }
+    }
+    // "me lembra às 8h [de manhã/da tarde/da noite]"
+    const lm = text.match(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])\s+(?:[àa]s?\s+)?(\d+[h:]?\d*(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?)/i);
+    if (lm) { const mod={type:'specificTime',text:lm[1]}; text=text.replace(lm[0],'').replace(/^\s*,?\s*/,'').trim(); return {text,mod}; }
+    return {text,mod:null};
+  }
+
+  // ── Parser de tempo relativo ──────────────────────────────
+  // "daqui X horas (e meia)" → horário absoluto
+  function parseRelative(t) {
+    if (!/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\b/i.test(t)) return null;
+    let mins = 0;
+    if (/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+meia\s+hora\b/i.test(t)) {
+      mins = 30;
+    } else {
+      const hm = t.match(/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+([\wê]+|\d+(?:[.,]\d+)?)\s+hora[s]?\b/i);
+      if (hm) {
+        const hv = toNum(hm[1]);
+        if (!isNaN(hv) && hv>0) {
+          mins = hv * 60;
+          if      (/\bhora[s]?\s+e\s+meia\b/i.test(t))   mins += 30;
+          else if (/\bhora[s]?\s+e\s+quinze\b/i.test(t)) mins += 15;
+          else {
+            const em = t.match(/\bhora[s]?\s+e\s+([\wê]+|\d+)\s*(?:minutos?)?\b/i);
+            if (em) { const ev=toNum(em[1]); if(!isNaN(ev)&&ev<60) mins+=ev; }
+          }
+        }
+      } else {
+        const mm = t.match(/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+([\wê]+|\d+)\s+minutos?\b/i);
+        if (mm) { const mv=toNum(mm[1]); if(!isNaN(mv)&&mv>0) mins=mv; }
+      }
+    }
+    if (mins<=0) return null;
+    const fut = new Date(Date.now()+mins*60000);
+    return {date:localDateStr(fut), time:localTimeStr(fut)};
+  }
+
+  // ── Parser de hora do dia ─────────────────────────────────
+  // Retorna {h, m, vague, ambiguous} ou null
+  function parseTimePart(t) {
+    // 1. Expressões regionais/especiais
+    if (/\b(?:cedinho|de\s+manh[ãa]zinha|muito\s+cedo)\b/i.test(t))           return {h:7,  m:0, vague:true};
+    if (/\bde\s+tardezinha\b|\bà?\s*tardinha\b/i.test(t))                      return {h:17, m:30,vague:true};
+    if (/\bde\s+noitinha\b/i.test(t))                                          return {h:19, m:0, vague:true};
+    if (/\bna\s+hora\s+do\s+almo[çc]o\b|\bno\s+almo[çc]o\b/i.test(t))        return {h:12, m:0, vague:true};
+    if (/\bno\s+jantar\b/i.test(t))                                            return {h:19, m:30,vague:true};
+    if (/\bno\s+fim\s+do\s+dia\b/i.test(t))                                   return {h:18, m:0, vague:true};
+    if (/\b(?:ao?\s+)?meio[\s-]?dia\b/i.test(t))                              return {h:12, m:0, vague:true};
+    if (/\bmeia[\s-]?noite\b/i.test(t))                                        return {h:0,  m:0, vague:true};
+
+    // 2. "NÚMERO [hMM] [e FRAC] da/de PERÍODO"
+    // Ex: "10 da noite", "seis da tarde", "8h30 da manhã", "três e meia da tarde"
+    const pp = t.match(/([\wê]+|\d+)(?:h(\d{2})?)?(?:\s+e\s+(meia|quinze|vinte|trinta))?\s+(?:hora[s]?\s+)?(?:da?\s+|de\s+|à\s+|pela\s+)(manh[ãa]|tarde|noite|madrugada)/i);
+    if (pp) {
+      const h0 = toNum(pp[1]);
+      if (!isNaN(h0) && h0>=0 && h0<=12) {
+        let m = parseInt(pp[2])||0;
+        if (pp[3]) m = FRAC[pp[3].toLowerCase()]||0;
+        return {h:applyPeriod(h0,pp[4]), m, vague:false, ambiguous:false};
+      }
+    }
+
+    // 3. "às NN [: ou h MM] [e FRAC]" — dígito, sem período ainda
+    const an = t.match(/[àa]s?\s+(\d{1,2})(?:[h:](\d{2})?)?\s*(?:e\s+(meia|quinze|vinte|trinta))?/i);
+    if (an) {
+      let h = parseInt(an[1]), m = parseInt(an[2])||0;
+      if (an[3]) m = FRAC[an[3].toLowerCase()]||0;
+      const idx = t.search(/[àa]s?\s+\d/i);
+      const after = t.slice(idx+an[0].length);
+      let hasPeriod = false;
+      if      (/\b(?:da?\s+|de\s+)?tarde\b/i.test(after))                              { h=h<12?h+12:h;  hasPeriod=true; }
+      else if (/\b(?:da?\s+|de\s+|à\s+)?noite\b/i.test(after))                        { if(h===12)h=0; else if(h>=6&&h<12)h+=12; hasPeriod=true; }
+      else if (/\b(?:de\s+|da?\s+)?manh[ãa]\b/i.test(after)||/\bmadrugada\b/i.test(after)){ if(h===12)h=0; hasPeriod=true; }
+      return {h, m, vague:false, ambiguous:!hasPeriod && h>0 && h<=12};
+    }
+
+    // 4. "às PALAVRA [e FRAC]" — hora por extenso
+    for (const [w, n] of Object.entries(PT_NUM)) {
+      if (w==='meia'||n>12||n<0) continue;
+      if (!new RegExp(`[àa]s?\\s+${w}\\b`,'i').test(t)) continue;
+      let h=n, m=0;
+      if (/\be\s+meia\b/i.test(t))   m=30;
+      else if (/\be\s+quinze\b/i.test(t)) m=15;
+      let hasPeriod=false;
+      if      (/\b(?:da?\s+|de\s+)?tarde\b/i.test(t))                               { h=h<12?h+12:h; hasPeriod=true; }
+      else if (/\b(?:da?\s+|de\s+|à\s+)?noite\b/i.test(t))                         { if(h===12)h=0; else if(h>=6&&h<12)h+=12; hasPeriod=true; }
+      else if (/\b(?:de\s+|da?\s+)?manh[ãa]\b/i.test(t)||/\bmadrugada\b/i.test(t)){ if(h===12)h=0; hasPeriod=true; }
+      return {h, m, vague:false, ambiguous:!hasPeriod && h>0 && h<=12};
+    }
+
+    // 5. Período genérico (hora vaga)
+    if (/\b(?:à|a)\s+noite\b|\bde\s+noite\b/i.test(t)) return {h:20,m:0,vague:true};
+    if (/\bde\s+manh[ãa]\b/i.test(t))                  return {h:8, m:0,vague:true};
+    if (/\b(?:à|pela)\s+tarde\b|\bde\s+tarde\b/i.test(t)) return {h:15,m:0,vague:true};
+
+    return null;
+  }
+
+  // ── Parser de data ────────────────────────────────────────
+  function parseDatePart(t) {
+    const now = new Date(), today = localDateStr(now);
+    // Ordem importa: "depois de amanhã" antes de "amanhã"
+    if (/\bdepois\s+de\s+amanhã\b|\bdepois\s+de\s+amanha\b/i.test(t))
+      return localDateStr(new Date(Date.now()+2*86400000));
+    if (/\bamanhã\b|\bamanha\b/i.test(t))
+      return localDateStr(new Date(Date.now()+86400000));
+    if (/\bhoje\b/i.test(t)) return today;
+    if (/\bsemana\s+que\s+vem\b|\bpr[oó]xima\s+semana\b/i.test(t))
+      return localDateStr(new Date(Date.now()+7*86400000));
+    if (/\bm[êe]s\s+que\s+vem\b|\bpr[oó]ximo\s+m[êe]s\b/i.test(t)) {
+      const d=new Date(now); d.setMonth(d.getMonth()+1); return localDateStr(d);
+    }
+    // "dia N de mês" / "N de mês"
+    const dm = t.match(/(?:\bdia\s+)?(\d{1,2})\s+de\s+([a-záãêéíóúç]+)/i);
+    if (dm) {
+      const day=parseInt(dm[1]), mo=MESES[dm[2].toLowerCase()];
+      if (mo && day>=1 && day<=31) {
+        let yr=now.getFullYear();
+        if (new Date(yr,mo-1,day)<=now) yr++;
+        return `${yr}-${p2(mo)}-${p2(day)}`;
+      }
+    }
+    // "N/M" ou "N/M/AAAA"
+    const sl = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    if (sl) { const day=parseInt(sl[1]),mo=parseInt(sl[2]); let yr=sl[3]?parseInt(sl[3]):now.getFullYear(); if(yr<100)yr+=2000; return `${yr}-${p2(mo)}-${p2(day)}`; }
+    // "dia N" sem mês
+    const dn = t.match(/\bdia\s+(\d{1,2})\b/);
+    if (dn) {
+      const day=parseInt(dn[1]); let mo=now.getMonth()+1, yr=now.getFullYear();
+      if (new Date(yr,mo-1,day)<=now) { mo++; if(mo>12){mo=1;yr++;} }
+      return `${yr}-${p2(mo)}-${p2(day)}`;
+    }
+    // Dias da semana (maior comprimento primeiro para evitar match parcial)
+    for (const [name,dow] of DIAS_SEMANA) {
+      if (new RegExp(`\\b${name}\\b`,'i').test(t)) {
+        const d=new Date(now), todayDow=d.getDay();
+        let diff=(dow-todayDow+7)%7||7;
+        d.setDate(d.getDate()+diff); return localDateStr(d);
+      }
+    }
+    return today;
+  }
+
+  // ── Aplica modificador de notificação ────────────────────
+  function applyNotifyMod(evDateStr, evTimeStr, mod) {
+    if (!mod) return {date:evDateStr,time:evTimeStr,label:'no momento'};
+    const evDate = new Date(`${evDateStr}T${evTimeStr}:00`);
+    if (mod.type==='daysBefore') {
+      const nd=new Date(evDate); nd.setDate(nd.getDate()-mod.days);
+      return {date:localDateStr(nd), time:'09:00', label:mod.label};
+    }
+    if (mod.type==='hoursBefore') {
+      const nd=new Date(evDate.getTime()-mod.hours*3600000);
+      return {date:localDateStr(nd), time:localTimeStr(nd), label:mod.label};
+    }
+    if (mod.type==='specificTime') {
+      const tl=mod.text.toLowerCase();
+      const hm=tl.match(/(\d{1,2})[h:]?(\d{2})?/);
+      if (hm) {
+        let nh=parseInt(hm[1]), nm=parseInt(hm[2])||0;
+        if (/tarde/i.test(tl)&&nh<12) nh+=12;
+        else if (/noite/i.test(tl)) { if(nh===12)nh=0; else if(nh>=6&&nh<12)nh+=12; }
+        else if (/manh[ãa]/i.test(tl)&&nh===12) nh=0;
+        return {date:evDateStr, time:`${p2(nh)}:${p2(nm)}`, label:`às ${p2(nh)}:${p2(nm)}`};
+      }
+    }
+    return {date:evDateStr, time:evTimeStr, label:'no momento'};
+  }
+
+  // ── Limpa a descrição da tarefa ───────────────────────────
+  function buildTarefa(rawText) {
+    let t = rawText;
+    t = t.replace(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])[^,.;]*/gi,'');
+    t = t.replace(/,?\s*(?:um\s+dia|uma\s+semana|uma\s+hora|dois\s+dias)\s+antes\b/gi,'');
+    t = t.replace(/,?\s*na\s+v[eé]spera\b/gi,'');
+    t = t.replace(/\bdaqui(?:\s+a)?\s+[\wê\s]+?(?:hora[s]?|minutos?)(?:\s+e\s+(?:meia|\d+))?\b/gi,'');
+    t = t.replace(/\ba\s+partir\s+de\s+[\wê\s]+?hora[s]?\b/gi,'');
+    t = t.replace(/\b(?:hoje|amanhã|amanha|depois\s+de\s+amanhã|depois\s+de\s+amanha)\b/gi,'');
+    t = t.replace(/\bdia\s+\d{1,2}(?:\s+de\s+\w+)?\b/gi,'');
+    t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,'');
+    t = t.replace(/[àa]s?\s+\d{1,2}(?:[h:]\d{0,2})?(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?/gi,'');
+    t = t.replace(/\b\d{1,2}(?:h\d{2})?\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite|madrugada)\b/gi,'');
+    t = t.replace(/\b(?:de\s+manh[ãa]|à?\s*noite|de\s+noite|ao\s+meio[\s-]?dia|meio[\s-]?dia|meia[\s-]?noite|cedinho|de\s+tardezinha|de\s+noitinha|de\s+manh[ãa]zinha|à?\s*tardinha|pela\s+tarde|à\s+tarde|semana\s+que\s+vem|pr[oó]xima\s+semana)\b/gi,'');
+    for (const [name] of DIAS_SEMANA) t = t.replace(new RegExp(`\\b${name}\\b`,'gi'),'');
+    t = t.replace(/\s{2,}/g,' ').replace(/^[,\s]+|[,\s]+$/g,'').trim();
+    return t||rawText.trim();
+  }
+
+  // ── PARSER PRINCIPAL ─────────────────────────────────────
+  function parseWithChrono(rawText) {
+    if (!rawText||!rawText.trim()) return null;
+    const now = new Date();
+    const nowMins = now.getHours()*60+now.getMinutes();
+
+    // 1. Extrair modificador de notificação
+    const {text:evText, mod:notifyMod} = extractNotifyMod(rawText);
+    const t = evText.toLowerCase().trim();
+
+    // 2. Tempo relativo tem prioridade absoluta ("daqui X")
+    const rel = parseRelative(t);
+    if (rel) {
+      const notify = applyNotifyMod(rel.date, rel.time, notifyMod);
+      return {tarefa:buildTarefa(rawText), data_lembrete:rel.date, horario_lembrete:rel.time,
+              notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
+    }
+
+    // 3. Data e hora independentes
+    const dateStr  = parseDatePart(t);
+    const timePart = parseTimePart(t);
+    let h=9, m=0, vague=true, ambiguous=false;
+    if (timePart) { h=timePart.h; m=timePart.m; vague=timePart.vague; ambiguous=!!timePart.ambiguous; }
+
+    // 4. Ajustes para hoje
+    const isToday = dateStr===localDateStr(now);
+    if (isToday) {
+      // Hora ambígua (ex: "às 8" sem período) já passou → tenta PM
+      if (ambiguous && h>0 && h<13 && (h*60+m)<=nowMins) h+=12;
+      // Hora vaga (ex: "à noite") já passou → avança +1h
+      if (vague && (h*60+m)<=nowMins) {
+        const fut=new Date(Date.now()+3600000);
+        const nd=localDateStr(fut), nt=localTimeStr(fut);
+        const notify=applyNotifyMod(nd,nt,notifyMod);
+        return {tarefa:buildTarefa(rawText), data_lembrete:nd, horario_lembrete:nt,
+                notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
+      }
+    }
+
+    const timeStr = `${p2(h)}:${p2(m)}`;
+    const notify = applyNotifyMod(dateStr, timeStr, notifyMod);
+    return {tarefa:buildTarefa(rawText), data_lembrete:dateStr, horario_lembrete:timeStr,
+            notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
+  }
+
+  // Mapa completo de palavras numéricas PT-BR
+  const PT_NUM = {
+    'zero':0,'um':1,'uma':1,'dois':2,'duas':2,'três':3,'tres':3,'quatro':4,
+    'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,'onze':11,'doze':12,
+    'treze':13,'quatorze':14,'quinze':15,'dezesseis':16,'dezessete':17,
+    'dezoito':18,'dezenove':19,'vinte':20,'trinta':30,'quarenta':40,'meia':30
+  };
+
+  function p2(n) { return String(Math.round(n)).padStart(2,'0'); }
+
+  // Formata Date → {date:"YYYY-MM-DD", time:"HH:MM"} usando hora local do device
+  function fmtDate(d) {
+    return {
+      date: `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`,
+      time: `${p2(d.getHours())}:${p2(d.getMinutes())}`
+    };
+  }
+
+  // Aplica período do dia a uma hora 0-12 → 0-23
+  // Regras: 10 da noite=22, 12 da noite=0, 1 da noite=1(madrugada), 6 da tarde=18
+  function applyPeriod(h, period) {
+    const p = period.toLowerCase();
+    if (p.includes('tarde'))  return h < 12 ? h + 12 : h;
+    if (p.includes('noite'))  { if (h===12) return 0; if (h>=1 && h<=5) return h; return h<12 ? h+12 : h; }
+    if (p.includes('manh'))   return h === 12 ? 0 : h;
+    return h;
+  }
+
+  // ── PRÉ-PROCESSAMENTO ────────────────────────────────────
+  // Estudo completo das formas que brasileiros falam por voz:
+  // "daqui três horas e meia", "às dez da noite", "de tardezinha",
+  // "cedinho", "ao meio dia", "semana que vem", etc.
+  function preprocessForChrono(rawText) {
+    const now = new Date();
+    const nowTotalMins = now.getHours() * 60 + now.getMinutes();
+    let t = rawText.toLowerCase().trim();
+
+    // ── PASSO 1: Expressões relativas → horário absoluto ──────
+    // "daqui X horas (e meia)", "a partir de X horas", "em X minutos"
+    // Resolve para "hoje às HH:MM" ou "amanhã às HH:MM"
+    t = t.replace(
+      /(?:daqui(?:\s+a)?|a\s+partir\s+de|em)\s+(?:(?:([\wê]+|\d+)\s+hora[s]?(?:\s+e\s+(meia|\d+)\s*(?:minutos?)?)?)|meia\s+hora(?:\s+e\s+(quinze|\d+)\s*(?:minutos?)?)?|([\wê]+|\d+)\s+minutos?)/gi,
+      (match) => {
+        let mins = 0;
+        if (/\bmeia\s+hora\b/i.test(match)) {
+          mins = 30;
+          const ex = match.match(/e\s+(quinze|\d+)\s*min/i);
+          if (ex) mins += ex[1].toLowerCase() === 'quinze' ? 15 : parseInt(ex[1]) || 0;
+        } else {
+          const hm = match.match(/\s+([\wê]+|\d+)\s+hora/i);
+          if (hm) {
+            const hv = PT_NUM[hm[1].toLowerCase()];
+            const hNum = hv !== undefined ? hv : parseFloat(hm[1].replace(',','.')) || 0;
+            mins += Math.floor(hNum) * 60 + Math.round((hNum % 1) * 60);
+          }
+          const em = match.match(/e\s+(meia|\d+)\s*(?:minutos?)?(?!\s*hora)/i);
+          if (em) mins += em[1].toLowerCase() === 'meia' ? 30 : parseInt(em[1]) || 0;
+          if (!hm) {
+            const mm = match.match(/\s+([\wê]+|\d+)\s+minutos?/i);
+            if (mm) { const mv = PT_NUM[mm[1].toLowerCase()]; mins += mv !== undefined ? mv : parseInt(mm[1]) || 0; }
+          }
+        }
+        if (mins <= 0) return match;
+        const fut = new Date(now.getTime() + mins * 60000);
+        const isNextDay = fut.getDate() !== now.getDate();
+        return `${isNextDay ? 'amanhã' : 'hoje'} às ${p2(fut.getHours())}:${p2(fut.getMinutes())}`;
+      }
+    );
+
+    // ── PASSO 2: PERÍODO + NÚMERO → hora 24h absoluta ────────
+    // "10 da noite"→"às 22:00", "seis da tarde"→"às 18:00"
+    // "oito da manhã"→"às 08:00", "6h da tarde"→"às 18:00"
+    // "três e meia da tarde"→"às 15:30"
+    t = t.replace(
+      /([\wê]+|\d+)(?:h(\d{2})?)?\s*(?:e\s+(meia|quinze|vinte|trinta)\s*)?(?:hora[s]?\s+)?(?:da?\s+|de\s+)(manh[ãa]|tarde|noite)/gi,
+      (match, hourPart, mins2, eFrac, period) => {
+        let h = PT_NUM[hourPart.toLowerCase()];
+        if (h === undefined) h = parseInt(hourPart);
+        if (isNaN(h) || h < 0 || h > 12) return match;
+        let m = parseInt(mins2) || 0;
+        if (eFrac) { const fm = {meia:30,quinze:15,vinte:20,trinta:30}; m = fm[eFrac.toLowerCase()] || 0; }
+        return `às ${p2(applyPeriod(h, period))}:${p2(m)}`;
+      }
+    );
+
+    // ── PASSO 3: "X e meia" / "X e quinze" após hora dígito ──
+    // "às 6 e meia"→"às 06:30", "às 10 e quinze"→"às 10:15"
+    t = t.replace(/([àa]s?\s+)(\d{1,2})\s+e\s+(meia|quinze|vinte)/gi, (_, pre, h, frac) => {
+      const fm = {meia:30,quinze:15,vinte:20};
+      return `${pre}${p2(parseInt(h))}:${p2(fm[frac.toLowerCase()]||0)}`;
+    });
+
+    // ── PASSO 4: Palavras numéricas em "às PALAVRA" ───────────
+    // "às dez"→"às 10", "às onze"→"às 11", "às oito"→"às 8"
+    for (const [w, n] of Object.entries(PT_NUM)) {
+      if (w === 'meia') continue;
+      t = t.replace(new RegExp(`([àa]s?\\s+)${w}\\b`, 'gi'), `$1${n}`);
+    }
+
+    // ── PASSO 5: Horário ambíguo sem período → tenta PM se já passou ──
+    // "às 8" quando já são 9h → "às 20:00"
+    // Só aplica se hora < 13 (AM) e hora já passou hoje
+    t = t.replace(/([àa]s?\s+)(\d{1,2})(?::(\d{2}))?\b(?!\s*(?:h\d|[:\d]))/gi, (match, pre, hStr, mStr) => {
+      const h = parseInt(hStr), m = parseInt(mStr) || 0;
+      if (h > 0 && h < 13 && (h * 60 + m) <= nowTotalMins) {
+        return `${pre}${p2(h + 12)}:${p2(m)}`;
+      }
+      return match;
+    });
+
+    // ── PASSO 6: Expressões informais e regionais ─────────────
+    const informal = [
+      // Variações de horário impreciso
+      [/\bde\s+tardezinha\b|\bà?\s*tardinha\b|\btardezinha\b/gi,      'às 17:30'],
+      [/\bcedinho\b|\bde\s+manh[ãa]zinha\b|\bmuito\s+cedo\b/gi,       'às 07:00'],
+      [/\bao\s+meio\s*-?\s*dia\b|\bmeio\s*-?\s*dia\b/gi,              'às 12:00'],
+      [/\bno\s+almo[çc]o\b/gi,                                        'às 12:00'],
+      [/\bno\s+jantar\b/gi,                                           'às 19:30'],
+      [/\bna\s+madrugada\b|\bde\s+madrugada\b/gi,                     'às 02:00'],
+      // Períodos genéricos (só se não tiver hora específica depois)
+      [/\b(?:à|a)\s+noite\b/gi,                                       'às 20:00'],
+      [/\bde\s+noite\b/gi,                                            'às 20:00'],
+      [/\bde\s+manh[ãa]\b/gi,                                         'às 08:00'],
+      [/\b(?:à|pela)\s+tarde\b(?!\s*(?:da|de))/gi,                    'às 15:00'],
+      [/\bde\s+tarde\b(?!\s*(?:da|de))/gi,                            'às 15:00'],
+      // Calendário
+      [/\bsemana\s+que\s+vem\b|\bna\s+pr[oó]xima\s+semana\b/gi,      'próxima semana'],
+      [/\bm[êe]s\s+que\s+vem\b|\bno\s+pr[oó]ximo\s+m[êe]s\b/gi,     'próximo mês'],
+      [/\bano\s+que\s+vem\b/gi,                                       String(new Date().getFullYear()+1)],
+    ];
+    for (const [pat, rep] of informal) t = t.replace(pat, rep);
+
+    // Limpeza final
+    t = t.replace(/\s{2,}/g, ' ').trim();
+    console.log(`[preprocess] "${rawText}" → "${t}"`);
+    return t;
+  }
+
+  // ── EXTRAI INSTRUÇÃO DE NOTIFICAÇÃO ──────────────────────
+  // Remove e retorna padrões: "me lembra X antes", "me avisa às 8h"
+  function extractNotifyMod(rawText) {
+    let text = rawText;
+    const patterns = [
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?(?:na\s+v[eé]spera|um\s+dia\s+antes)/i,
+       { type:'daysBefore', days:1, label:'1 dia antes' }],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?(?:dois|2)\s+dias\s+antes/i,
+       { type:'daysBefore', days:2, label:'2 dias antes' }],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+semana\s+antes/i,
+       { type:'daysBefore', days:7, label:'1 semana antes' }],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+hora\s+antes/i,
+       { type:'hoursBefore', hours:1, label:'1 hora antes' }],
+      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?duas\s+horas\s+antes/i,
+       { type:'hoursBefore', hours:2, label:'2 horas antes' }],
+    ];
+    for (const [pat, mod] of patterns) {
+      if (pat.test(text)) {
+        text = text.replace(pat, '').replace(/^\s*,?\s*/, '').trim();
+        return { text, mod };
+      }
+    }
+    // "me lembra às Xh [de manhã/da tarde/da noite]"
+    const lm = text.match(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])\s+(?:[àa]s?\s+)?(\d+[h:]?\d*(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?)/i);
+    if (lm) {
+      const mod = { type:'specificTime', text: lm[1] };
+      text = text.replace(lm[0], '').replace(/^\s*,?\s*/, '').trim();
+      return { text, mod };
+    }
+    return { text, mod: null };
+  }
+
+  // ── PARSER PRINCIPAL ─────────────────────────────────────
+  // Retorna objeto de lembrete ou null se não entendeu
+  function parseWithChrono(rawText) {
+    // chrono-node v1: window.chrono com chrono.pt (sem .casual)
+    const chronoPT = (typeof chrono !== 'undefined') ? (chrono.pt || chrono.casual || chrono) : null;
+    if (!chronoPT || typeof chronoPT.parse !== 'function') throw new Error('Chrono.js não carregou. Verifique sua conexão e recarregue o app.');
+
+    // 1. Extrair instrução de notificação
+    const { text: textSemNotify, mod: notifyMod } = extractNotifyMod(rawText);
+
+    // 2. Pré-processar e parsear com Chrono
+    const processed = preprocessForChrono(textSemNotify);
+    const ref = new Date();
+    const results = chronoPT.parse(processed, ref, { forwardDate: true });
+
+    if (!results.length) {
+      console.warn('[parse] Chrono não encontrou data em:', processed);
+      return null;
+    }
+
+    const eventDate = results[0].start.date();
+    const { date: dateStr, time: timeStr } = fmtDate(eventDate);
+
+    // 3. Calcular notificação
+    let notifyDate = dateStr, notifyTime = timeStr, antecedencia = 'no momento';
+
+    if (notifyMod) {
+      if (notifyMod.type === 'daysBefore') {
+        const nd = new Date(eventDate);
+        nd.setDate(nd.getDate() - notifyMod.days);
+        notifyDate = fmtDate(nd).date;
+        notifyTime = '09:00';
+        antecedencia = notifyMod.label;
+      } else if (notifyMod.type === 'hoursBefore') {
+        const nd = new Date(eventDate.getTime() - notifyMod.hours * 3600000);
+        ({ date: notifyDate, time: notifyTime } = fmtDate(nd));
+        antecedencia = notifyMod.label;
+      } else if (notifyMod.type === 'specificTime') {
+        const notifyProcessed = preprocessForChrono(notifyMod.text);
+        const np = chronoPT.parse(notifyProcessed, ref, { forwardDate: true });
+        if (np && np.length) { notifyTime = fmtDate(np[0].start.date()).time; antecedencia = `às ${notifyTime}`; }
+      }
+    }
+
+    // 4. Limpar descrição da tarefa
+    let tarefa = rawText;
+    if (results[0].text) tarefa = tarefa.replace(results[0].text, '');
+    tarefa = tarefa
+      .replace(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])[^,]*/gi, '')
+      .replace(/,?\s*(?:um\s+dia|uma\s+semana|uma\s+hora|dois\s+dias)\s+antes/gi, '')
+      .replace(/,?\s*na\s+v[eé]spera/gi, '')
+      .replace(/daqui(?:\s+a)?\s+[\wê\s]+?(?:hora[s]?|minutos?)(?:\s+e\s+(?:meia|\d+))?/gi, '')
+      .replace(/a\s+partir\s+de\s+[\wê\s]+?hora[s]?/gi, '')
+      .replace(/\b(?:hoje|amanhã|amanha|depois\s+de\s+amanhã|depois\s+de\s+amanha)\b/gi, '')
+      .replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+    if (!tarefa || tarefa.length < 2) tarefa = rawText.trim();
+
+    return { tarefa, data_lembrete:dateStr, horario_lembrete:timeStr,
+             notify_date:notifyDate, notify_time:notifyTime,
+             antecedencia, emoji:extractEmoji(rawText) };
+  }
+
+  // ── SCHEDULING ───────────────────────────────────────────
+  function getNotifyDate(r) {
+    const d = r.notify_date || r.data_lembrete;
+    return new Date(`${d}T${r.notify_time}:00-03:00`);
+  }
+
+  let swRegistration = null;
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => { swRegistration = reg; console.log("SW registrado:", reg.scope); })
+      .catch(e => console.error("Erro SW:", e));
+  }
+
+  function showNotificationViaSW(reminder) {
+    const title = `${reminder.emoji} Remember`, body = reminder.tarefa, tag = `reminder-${reminder.id}`;
+    if (swRegistration && swRegistration.active) { swRegistration.active.postMessage({ type: 'SHOW_NOTIFICATION', title, body, tag }); return; }
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body, tag, requireInteraction: true, vibrate: [200,100,200] }); return; } catch(e) {}
+    }
+    setFeedback(`🔔 LEMBRETE: ${body}`, "info");
+  }
+
+  async function fireReminder(reminder) {
+    playNotificationSound();
+    const pushRegistered = localStorage.getItem("remember_push_registered");
+    if (pushRegistered) {
+      try {
+        const res = await fetch(SERVER_URL + "/notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: getUserId(), title: reminder.emoji + " Remember", body: reminder.tarefa }) });
+        if (!res.ok) throw new Error();
+      } catch(e) { showNotificationViaSW(reminder); }
+    } else { showNotificationViaSW(reminder); }
+    const userEmail = getUserEmail();
+    if (userEmail) {
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { to_email: userEmail, tarefa: reminder.tarefa, data_lembrete: formatDateBR(reminder.data_lembrete), horario_lembrete: reminder.horario_lembrete, emoji: reminder.emoji, antecedencia: reminder.antecedencia, name: "Marcos", email: userEmail }).catch(e => console.error("Erro email:", e));
+    }
+  }
+
+  function scheduleReminder(reminder) {
+    const notifyAt = getNotifyDate(reminder);
+    const delay = notifyAt.getTime() - Date.now();
+    if (delay <= 0) return false;
+    if (delay > 20 * 86400000) {
+      timers[reminder.id] = setInterval(() => { const rem = getNotifyDate(reminder).getTime() - Date.now(); if (rem <= 60000) { clearInterval(timers[reminder.id]); setTimeout(() => fireReminder(reminder), Math.max(0, rem)); } }, 3600000);
+    } else {
+      timers[reminder.id] = setTimeout(() => fireReminder(reminder), delay);
+    }
+    return notifyAt;
+  }
+
+  function cancelTimer(id) { if (timers[id]) { clearTimeout(timers[id]); delete timers[id]; } }
+  function saveReminders() { localStorage.setItem("remember_reminders", JSON.stringify(reminders)); }
+
+  async function sendReminderToServer(reminder, notifyAt) {
+    if (!notifyAt || !localStorage.getItem("remember_push_registered")) return;
+    try {
+      await fetch(SERVER_URL + "/schedule-reminder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: getUserId(), reminderId: String(reminder.id), notifyAt: notifyAt.toISOString(), title: reminder.emoji + " Remember", body: reminder.tarefa }) });
+    } catch(e) { console.error("Erro ao enviar lembrete ao servidor:", e); }
+  }
+
+  async function removeReminderFromServer(id) {
+    if (!localStorage.getItem("remember_push_registered")) return;
+    try { await fetch(`${SERVER_URL}/schedule-reminder/${getUserId()}/${id}`, { method: "DELETE" }); } catch(e) {}
+  }
+
+  // ── UI HELPERS ───────────────────────────────────────────
+  function setFeedback(msg,type) { document.getElementById("feedback").innerHTML = msg ? `<div class="feedback ${type}">${msg}</div>` : ""; }
+  function setExample(text) { document.getElementById("inputText").value = text; document.getElementById("inputText").focus(); }
+  function setTab(tab) { activeTab = tab; document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active")); document.getElementById("tab-"+tab).classList.add("active"); renderReminders(); }
+  function deleteReminder(id) { cancelTimer(id); reminders = reminders.filter(r => r.id !== id); saveReminders(); renderReminders(); removeReminderFromServer(id); }
+
+  function renderReminders() {
+    const sorted = [...reminders].sort((a,b) => new Date(`${a.data_lembrete}T${a.horario_lembrete}`) - new Date(`${b.data_lembrete}T${b.horario_lembrete}`));
+    const filtered = sorted.filter(r => { if(activeTab==="today") return r.data_lembrete===todayBR(); if(activeTab==="upcoming") return r.data_lembrete!==todayBR(); return true; });
+    document.getElementById("count").textContent = reminders.length;
+    document.getElementById("remindersSection").style.display = reminders.length > 0 ? "block" : "none";
+    document.getElementById("examplesSection").style.display = reminders.length === 0 ? "block" : "none";
+    const list = document.getElementById("remindersList");
+    if (!filtered.length) { list.innerHTML = '<div class="empty">Nenhum lembrete nessa categoria</div>'; return; }
+    list.innerHTML = filtered.map(r => {
+      const today = r.data_lembrete === todayBR(), notifyAt = getNotifyDate(r), agendado = notifyAt.getTime() > Date.now();
+      return `<div class="reminder-card ${today?"today":""}">
+        <div class="reminder-emoji">${r.emoji}</div>
+        <div class="reminder-content">
+          <div class="reminder-task">${r.tarefa}</div>
+          <div class="reminder-meta">
+            <span class="${today?"today-color":""}">📅 ${getRelativeLabel(r.data_lembrete)} às ${r.horario_lembrete}</span>
+            <span>🔔 Aviso: ${r.antecedencia}</span>
+            ${agendado?'<span class="notif-color">✅ Agendado</span>':'<span style="color:#8a5050">⌛ Passou</span>'}
+          </div>
+        </div>
+        <button class="delete-btn" onclick="deleteReminder(${r.id})">×</button>
+      </div>`;
+    }).join("");
+  }
+
+  // ── SUBMIT ───────────────────────────────────────────────
+  function handleSubmit() {
+    const input = document.getElementById("inputText").value.trim();
+    if (!input) return;
+    const btn = document.getElementById("saveBtn");
+    btn.disabled = true; btn.textContent = "...";
+    setFeedback("", "");
+    try {
+      const parsed = parseWithChrono(input);
+      if (!parsed) {
+        setFeedback("🤔 Não entendi. Pode repetir de outra forma? Ex: 'Reunião amanhã às 10h'", "error");
+        return;
+      }
+      const reminder = { id: Date.now(), ...parsed, agendado: false };
+      const notifyAt = scheduleReminder(reminder);
+      reminder.agendado = !!notifyAt;
+      reminders.push(reminder);
+      saveReminders();
+      sendReminderToServer(reminder, notifyAt);
+      document.getElementById("inputText").value = "";
+      const msg = notifyAt
+        ? `✓ Lembrete salvo! Aviso em ${notifyAt.toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})}`
+        : `✓ Lembrete salvo! (horário já passou)`;
+      setFeedback(msg, "success");
+      renderReminders();
+    } catch(e) {
+      console.error("Erro:", e);
+      setFeedback("❌ " + e.message, "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "Salvar";
+    }
+  }
+
+  document.getElementById("inputText").addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+  });
+
+  // ── NOTIFICATIONS ────────────────────────────────────────
+  async function ativarNotificacoes() {
+    const banner = document.getElementById("notifBanner");
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") {
+      if (banner) banner.style.display = "none";
+      await registerPushNotifications();
+      new Notification("🔔 Remember", { body: "Notificações ativadas! Você receberá seus lembretes.", requireInteraction: false });
+      setFeedback("✓ Notificações ativadas! Seus lembretes chegarão mesmo com o app fechado.", "success");
+    } else {
+      if (banner) banner.style.display = "none";
+      setFeedback("❌ Permissão negada. Ative manualmente nas configurações do Chrome.", "error");
+    }
+  }
+
+  async function testeNotificacao() {
+    if (!("Notification" in window)) { setFeedback("❌ Seu navegador não suporta notificações. Use Chrome.", "error"); return; }
+    let perm = Notification.permission;
+    if (perm === "default") perm = await Notification.requestPermission();
+    if (perm === "denied") { setFeedback("❌ Notificações bloqueadas! Ative nas configurações do Chrome.", "error"); return; }
+    if (perm !== "granted") { setFeedback("❌ Permissão não concedida.", "error"); return; }
+    try {
+      if (swRegistration && swRegistration.active) {
+        swRegistration.active.postMessage({ type: 'SHOW_NOTIFICATION', title: '🔔 Remember funciona!', body: 'Notificações estão ativas!', tag: 'test' });
+        setFeedback("✓ Notificação enviada! Verifique a barra de notificações.", "success");
+      } else {
+        const n = new Notification("🔔 Remember funciona!", { body: "Notificações estão ativas!", requireInteraction: true });
+        n.onclick = () => { window.focus(); n.close(); };
+        setFeedback("✓ Notificação enviada!", "success");
+      }
+    } catch(e) { setFeedback("❌ Erro: " + e.message, "error"); }
+  }
+
+  // ── INIT ─────────────────────────────────────────────────
+  async function init() {
+    reminders.forEach(r => { const notifyAt = getNotifyDate(r); if (notifyAt.getTime() > Date.now()) scheduleReminder(r); });
+    renderReminders();
+    if ("Notification" in window) {
+      if (Notification.permission === "default") { const b = document.getElementById("notifBanner"); if (b) b.style.display = "flex"; }
+      else if (Notification.permission === "denied") setFeedback("⚠️ Notificações bloqueadas. Ative nas configurações do Chrome.", "error");
+      else if (Notification.permission === "granted") registerPushNotifications();
+    }
+    const eb = document.getElementById("emailBanner"); if (eb) eb.style.display = "block";
+    const ei = document.getElementById("userEmail"); if (ei && getUserEmail()) ei.value = getUserEmail();
+  }
+
+  document.getElementById("appVer").textContent = "v" + APP_VERSION;
+  init();
+</script>
+</body>
+</html>
