@@ -416,9 +416,10 @@
   function parseDatePart(t) {
     const now = new Date(), today = localDateStr(now);
     // Ordem importa: "depois de amanhã" antes de "amanhã"
-    if (/\bdepois\s+de\s+amanhã\b|\bdepois\s+de\s+amanha\b/i.test(t))
+    // Nota: \b não funciona com ã/ê/etc no JS → usar includes() ou lookahead
+    if (/depois\s+de\s+aman(h[ãa]|a)/i.test(t))
       return localDateStr(new Date(Date.now()+2*86400000));
-    if (/\bamanhã\b|\bamanha\b/i.test(t))
+    if (t.includes('amanhã') || t.includes('amanha'))
       return localDateStr(new Date(Date.now()+86400000));
     if (/\bhoje\b/i.test(t)) return today;
     if (/\bsemana\s+que\s+vem\b|\bpr[oó]xima\s+semana\b/i.test(t))
@@ -491,7 +492,8 @@
     t = t.replace(/,?\s*na\s+v[eé]spera\b/gi,'');
     t = t.replace(/\bdaqui(?:\s+a)?\s+[\wê\s]+?(?:hora[s]?|minutos?)(?:\s+e\s+(?:meia|\d+))?\b/gi,'');
     t = t.replace(/\ba\s+partir\s+de\s+[\wê\s]+?hora[s]?\b/gi,'');
-    t = t.replace(/\b(?:hoje|amanhã|amanha|depois\s+de\s+amanhã|depois\s+de\s+amanha)\b/gi,'');
+    t = t.replace(/(?:depois\s+de\s+)?aman(h[ãa]|a)/gi,'');
+    t = t.replace(/\bhoje\b/gi,'');
     t = t.replace(/\bdia\s+\d{1,2}(?:\s+de\s+\w+)?\b/gi,'');
     t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,'');
     t = t.replace(/[àa]s?\s+\d{1,2}(?:[h:]\d{0,2})?(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?/gi,'');
