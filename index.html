@@ -268,286 +268,75 @@
     return"🔔";
   }
 
-  // ── Dicionários ───────────────────────────────────────────
-  const PT_NUM = {
-    'zero':0,'um':1,'uma':1,'dois':2,'duas':2,'três':3,'tres':3,'quatro':4,
-    'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,'onze':11,'doze':12,
-    'treze':13,'quatorze':14,'quinze':15,'dezesseis':16,'dezessete':17,
-    'dezoito':18,'dezenove':19,'vinte':20,'trinta':30,'quarenta':40,'meia':0.5
-  };
-  const MESES = {
-    'janeiro':1,'fevereiro':2,'março':3,'marco':3,'abril':4,'maio':5,
-    'junho':6,'julho':7,'agosto':8,'setembro':9,'outubro':10,'novembro':11,'dezembro':12
-  };
-  // dia da semana → 0=dom..6=sáb, ordenado por tamanho desc para match mais longo primeiro
-  const DIAS_SEMANA = [
-    ['segunda-feira',1],['terça-feira',2],['quarta-feira',3],['quinta-feira',4],['sexta-feira',5],
-    ['sábado',6],['sabado',6],['domingo',0],['segunda',1],['terça',2],['terca',2],
-    ['quarta',3],['quinta',4],['sexta',5]
-  ];
-  const FRAC = {'meia':30,'quinze':15,'vinte':20,'trinta':30,'quarenta':40};
+  // ── AI PARSE CONFIG ───────────────────────────────────────
+  // Chave fica no servidor Render (env var OPENROUTER_API_KEY)
+  const PARSE_AI_URL = SERVER_URL + "/parse-ai";
 
-  function toNum(s) {
-    if (!s) return NaN;
-    const k = s.toLowerCase().trim();
-    return PT_NUM[k] !== undefined ? PT_NUM[k] : parseFloat(k.replace(',','.'));
-  }
-
-  // Aplica período do dia: h=10,'noite'→22; h=12,'noite'→0; h=1,'noite'→1(madrugada)
-  function applyPeriod(h, period) {
-    const p = period.toLowerCase();
-    if (p.includes('tarde'))                   return h===12 ? 12 : (h<12 ? h+12 : h);
-    if (p.includes('noite'))                   { if(h===12)return 0; return (h>=1&&h<=5)?h:(h<12?h+12:h); }
-    if (p.includes('manh')||p.includes('madrugada')) return h===12 ? 0 : h;
-    return h;
-  }
-
-  // ── Extrai instrução de notificação ──────────────────────
-  function extractNotifyMod(rawText) {
-    let text = rawText;
-    const pats = [
-      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?(?:na\s+v[eé]spera|um\s+dia\s+antes)\b/i,  {type:'daysBefore',days:1,label:'1 dia antes'}],
-      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?dois\s+dias\s+antes\b/i,                    {type:'daysBefore',days:2,label:'2 dias antes'}],
-      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+semana\s+antes\b/i,                   {type:'daysBefore',days:7,label:'1 semana antes'}],
-      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?uma\s+hora\s+antes\b/i,                     {type:'hoursBefore',hours:1,label:'1 hora antes'}],
-      [/,?\s*(?:me\s+(?:lembr[ae][rm]?|avis[ae])\s+)?duas\s+horas\s+antes\b/i,                   {type:'hoursBefore',hours:2,label:'2 horas antes'}],
-    ];
-    for (const [pat, mod] of pats) {
-      if (pat.test(text)) { text=text.replace(pat,'').replace(/^\s*,?\s*/,'').trim(); return {text,mod}; }
-    }
-    // "me lembra às 8h [de manhã/da tarde/da noite]"
-    const lm = text.match(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])\s+(?:[àa]s?\s+)?(\d+[h:]?\d*(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?)/i);
-    if (lm) { const mod={type:'specificTime',text:lm[1]}; text=text.replace(lm[0],'').replace(/^\s*,?\s*/,'').trim(); return {text,mod}; }
-    return {text,mod:null};
-  }
-
-  // ── Parser de tempo relativo ──────────────────────────────
-  // "daqui X horas (e meia)" → horário absoluto
-  function parseRelative(t) {
-    if (!/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\b/i.test(t)) return null;
-    let mins = 0;
-    if (/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+meia\s+hora\b/i.test(t)) {
-      mins = 30;
-    } else {
-      const hm = t.match(/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+([\wê]+|\d+(?:[.,]\d+)?)\s+hora[s]?\b/i);
-      if (hm) {
-        const hv = toNum(hm[1]);
-        if (!isNaN(hv) && hv>0) {
-          mins = hv * 60;
-          if      (/\bhora[s]?\s+e\s+meia\b/i.test(t))   mins += 30;
-          else if (/\bhora[s]?\s+e\s+quinze\b/i.test(t)) mins += 15;
-          else {
-            const em = t.match(/\bhora[s]?\s+e\s+([\wê]+|\d+)\s*(?:minutos?)?\b/i);
-            if (em) { const ev=toNum(em[1]); if(!isNaN(ev)&&ev<60) mins+=ev; }
-          }
-        }
-      } else {
-        const mm = t.match(/\b(?:daqui(?:\s+a)?|a\s+partir\s+de)\s+([\wê]+|\d+)\s+minutos?\b/i);
-        if (mm) { const mv=toNum(mm[1]); if(!isNaN(mv)&&mv>0) mins=mv; }
-      }
-    }
-    if (mins<=0) return null;
-    const fut = new Date(Date.now()+mins*60000);
-    return {date:localDateStr(fut), time:localTimeStr(fut)};
-  }
-
-  // ── Parser de hora do dia ─────────────────────────────────
-  // Retorna {h, m, vague, ambiguous} ou null
-  function parseTimePart(t) {
-    // 1. Expressões regionais/especiais
-    if (/\b(?:cedinho|de\s+manh[ãa]zinha|muito\s+cedo)\b/i.test(t))           return {h:7,  m:0, vague:true};
-    if (/\bde\s+tardezinha\b|\bà?\s*tardinha\b/i.test(t))                      return {h:17, m:30,vague:true};
-    if (/\bde\s+noitinha\b/i.test(t))                                          return {h:19, m:0, vague:true};
-    if (/\bna\s+hora\s+do\s+almo[çc]o\b|\bno\s+almo[çc]o\b/i.test(t))        return {h:12, m:0, vague:true};
-    if (/\bno\s+jantar\b/i.test(t))                                            return {h:19, m:30,vague:true};
-    if (/\bno\s+fim\s+do\s+dia\b/i.test(t))                                   return {h:18, m:0, vague:true};
-    if (/\b(?:ao?\s+)?meio[\s-]?dia\b/i.test(t))                              return {h:12, m:0, vague:true};
-    if (/\bmeia[\s-]?noite\b/i.test(t))                                        return {h:0,  m:0, vague:true};
-
-    // 2. "NÚMERO [hMM] [e FRAC] da/de PERÍODO"
-    // Ex: "10 da noite", "seis da tarde", "8h30 da manhã", "três e meia da tarde"
-    const pp = t.match(/([\wê]+|\d+)(?:h(\d{2})?)?(?:\s+e\s+(meia|quinze|vinte|trinta))?\s+(?:hora[s]?\s+)?(?:da?\s+|de\s+|à\s+|pela\s+)(manh[ãa]|tarde|noite|madrugada)/i);
-    if (pp) {
-      const h0 = toNum(pp[1]);
-      if (!isNaN(h0) && h0>=0 && h0<=12) {
-        let m = parseInt(pp[2])||0;
-        if (pp[3]) m = FRAC[pp[3].toLowerCase()]||0;
-        return {h:applyPeriod(h0,pp[4]), m, vague:false, ambiguous:false};
-      }
-    }
-
-    // 3. "às NN [: ou h MM] [e FRAC]" — dígito, sem período ainda
-    const an = t.match(/[àa]s?\s+(\d{1,2})(?:[h:](\d{2})?)?\s*(?:e\s+(meia|quinze|vinte|trinta))?/i);
-    if (an) {
-      let h = parseInt(an[1]), m = parseInt(an[2])||0;
-      if (an[3]) m = FRAC[an[3].toLowerCase()]||0;
-      const idx = t.search(/[àa]s?\s+\d/i);
-      const after = t.slice(idx+an[0].length);
-      let hasPeriod = false;
-      if      (/\b(?:da?\s+|de\s+)?tarde\b/i.test(after))                              { h=h<12?h+12:h;  hasPeriod=true; }
-      else if (/\b(?:da?\s+|de\s+|à\s+)?noite\b/i.test(after))                        { if(h===12)h=0; else if(h>=6&&h<12)h+=12; hasPeriod=true; }
-      else if (/\b(?:de\s+|da?\s+)?manh[ãa]\b/i.test(after)||/\bmadrugada\b/i.test(after)){ if(h===12)h=0; hasPeriod=true; }
-      return {h, m, vague:false, ambiguous:!hasPeriod && h>0 && h<=12};
-    }
-
-    // 4. "às PALAVRA [e FRAC]" — hora por extenso
-    for (const [w, n] of Object.entries(PT_NUM)) {
-      if (w==='meia'||n>12||n<0) continue;
-      if (!new RegExp(`[àa]s?\\s+${w}\\b`,'i').test(t)) continue;
-      let h=n, m=0;
-      if (/\be\s+meia\b/i.test(t))   m=30;
-      else if (/\be\s+quinze\b/i.test(t)) m=15;
-      let hasPeriod=false;
-      if      (/\b(?:da?\s+|de\s+)?tarde\b/i.test(t))                               { h=h<12?h+12:h; hasPeriod=true; }
-      else if (/\b(?:da?\s+|de\s+|à\s+)?noite\b/i.test(t))                         { if(h===12)h=0; else if(h>=6&&h<12)h+=12; hasPeriod=true; }
-      else if (/\b(?:de\s+|da?\s+)?manh[ãa]\b/i.test(t)||/\bmadrugada\b/i.test(t)){ if(h===12)h=0; hasPeriod=true; }
-      return {h, m, vague:false, ambiguous:!hasPeriod && h>0 && h<=12};
-    }
-
-    // 5. Período genérico (hora vaga)
-    if (/\b(?:à|a)\s+noite\b|\bde\s+noite\b/i.test(t)) return {h:20,m:0,vague:true};
-    if (/\bde\s+manh[ãa]\b/i.test(t))                  return {h:8, m:0,vague:true};
-    if (/\b(?:à|pela)\s+tarde\b|\bde\s+tarde\b/i.test(t)) return {h:15,m:0,vague:true};
-
-    return null;
-  }
-
-  // ── Parser de data ────────────────────────────────────────
-  function parseDatePart(t) {
-    const now = new Date(), today = localDateStr(now);
-    // Ordem importa: "depois de amanhã" antes de "amanhã"
-    // Nota: \b não funciona com ã/ê/etc no JS → usar includes() ou lookahead
-    if (/depois\s+de\s+aman(h[ãa]|a)/i.test(t))
-      return localDateStr(new Date(Date.now()+2*86400000));
-    if (t.includes('amanhã') || t.includes('amanha'))
-      return localDateStr(new Date(Date.now()+86400000));
-    if (/\bhoje\b/i.test(t)) return today;
-    if (/\bsemana\s+que\s+vem\b|\bpr[oó]xima\s+semana\b/i.test(t))
-      return localDateStr(new Date(Date.now()+7*86400000));
-    if (/\bm[êe]s\s+que\s+vem\b|\bpr[oó]ximo\s+m[êe]s\b/i.test(t)) {
-      const d=new Date(now); d.setMonth(d.getMonth()+1); return localDateStr(d);
-    }
-    // "dia N de mês" / "N de mês"
-    const dm = t.match(/(?:\bdia\s+)?(\d{1,2})\s+de\s+([a-záãêéíóúç]+)/i);
-    if (dm) {
-      const day=parseInt(dm[1]), mo=MESES[dm[2].toLowerCase()];
-      if (mo && day>=1 && day<=31) {
-        let yr=now.getFullYear();
-        if (new Date(yr,mo-1,day)<=now) yr++;
-        return `${yr}-${p2(mo)}-${p2(day)}`;
-      }
-    }
-    // "N/M" ou "N/M/AAAA"
-    const sl = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
-    if (sl) { const day=parseInt(sl[1]),mo=parseInt(sl[2]); let yr=sl[3]?parseInt(sl[3]):now.getFullYear(); if(yr<100)yr+=2000; return `${yr}-${p2(mo)}-${p2(day)}`; }
-    // "dia N" sem mês
-    const dn = t.match(/\bdia\s+(\d{1,2})\b/);
-    if (dn) {
-      const day=parseInt(dn[1]); let mo=now.getMonth()+1, yr=now.getFullYear();
-      if (new Date(yr,mo-1,day)<=now) { mo++; if(mo>12){mo=1;yr++;} }
-      return `${yr}-${p2(mo)}-${p2(day)}`;
-    }
-    // Dias da semana (maior comprimento primeiro para evitar match parcial)
-    for (const [name,dow] of DIAS_SEMANA) {
-      if (new RegExp(`\\b${name}\\b`,'i').test(t)) {
-        const d=new Date(now), todayDow=d.getDay();
-        let diff=(dow-todayDow+7)%7||7;
-        d.setDate(d.getDate()+diff); return localDateStr(d);
-      }
-    }
-    return today;
-  }
-
-  // ── Aplica modificador de notificação ────────────────────
-  function applyNotifyMod(evDateStr, evTimeStr, mod) {
-    if (!mod) return {date:evDateStr,time:evTimeStr,label:'no momento'};
-    const evDate = new Date(`${evDateStr}T${evTimeStr}:00`);
-    if (mod.type==='daysBefore') {
-      const nd=new Date(evDate); nd.setDate(nd.getDate()-mod.days);
-      return {date:localDateStr(nd), time:'09:00', label:mod.label};
-    }
-    if (mod.type==='hoursBefore') {
-      const nd=new Date(evDate.getTime()-mod.hours*3600000);
-      return {date:localDateStr(nd), time:localTimeStr(nd), label:mod.label};
-    }
-    if (mod.type==='specificTime') {
-      const tl=mod.text.toLowerCase();
-      const hm=tl.match(/(\d{1,2})[h:]?(\d{2})?/);
-      if (hm) {
-        let nh=parseInt(hm[1]), nm=parseInt(hm[2])||0;
-        if (/tarde/i.test(tl)&&nh<12) nh+=12;
-        else if (/noite/i.test(tl)) { if(nh===12)nh=0; else if(nh>=6&&nh<12)nh+=12; }
-        else if (/manh[ãa]/i.test(tl)&&nh===12) nh=0;
-        return {date:evDateStr, time:`${p2(nh)}:${p2(nm)}`, label:`às ${p2(nh)}:${p2(nm)}`};
-      }
-    }
-    return {date:evDateStr, time:evTimeStr, label:'no momento'};
-  }
-
-  // ── Limpa a descrição da tarefa ───────────────────────────
-  function buildTarefa(rawText) {
-    let t = rawText;
-    t = t.replace(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])[^,.;]*/gi,'');
-    t = t.replace(/,?\s*(?:um\s+dia|uma\s+semana|uma\s+hora|dois\s+dias)\s+antes\b/gi,'');
-    t = t.replace(/,?\s*na\s+v[eé]spera\b/gi,'');
-    t = t.replace(/\bdaqui(?:\s+a)?\s+[\wê\s]+?(?:hora[s]?|minutos?)(?:\s+e\s+(?:meia|\d+))?\b/gi,'');
-    t = t.replace(/\ba\s+partir\s+de\s+[\wê\s]+?hora[s]?\b/gi,'');
-    t = t.replace(/(?:depois\s+de\s+)?aman(h[ãa]|a)/gi,'');
-    t = t.replace(/\bhoje\b/gi,'');
-    t = t.replace(/\bdia\s+\d{1,2}(?:\s+de\s+\w+)?\b/gi,'');
-    t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,'');
-    t = t.replace(/[àa]s?\s+\d{1,2}(?:[h:]\d{0,2})?(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?/gi,'');
-    t = t.replace(/[àa]s?\s+[\wê]+(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))/gi,'');
-    t = t.replace(/\b\d{1,2}(?:h\d{2})?\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite|madrugada)\b/gi,'');
-    t = t.replace(/\b(?:de\s+manh[ãa]|à?\s*noite|de\s+noite|ao\s+meio[\s-]?dia|meio[\s-]?dia|meia[\s-]?noite|cedinho|de\s+tardezinha|de\s+noitinha|de\s+manh[ãa]zinha|à?\s*tardinha|pela\s+tarde|à\s+tarde|semana\s+que\s+vem|pr[oó]xima\s+semana)\b/gi,'');
-    for (const [name] of DIAS_SEMANA) t = t.replace(new RegExp(`\\b${name}\\b`,'gi'),'');
-    t = t.replace(/\s{2,}/g,' ').replace(/^[,\s]+|[,\s]+$/g,'').trim();
-    return t||rawText.trim();
-  }
-
-  // ── PARSER PRINCIPAL ─────────────────────────────────────
-  function parseWithChrono(rawText) {
-    if (!rawText||!rawText.trim()) return null;
+  // ── PARSER PRINCIPAL — OpenRouter AI ─────────────────────
+  // Fallback regex simples para quando a API falhar
+  function _fallbackParse(rawText) {
     const now = new Date();
-    const nowMins = now.getHours()*60+now.getMinutes();
+    const dateStr = localDateStr(now);
+    const timeStr = localTimeStr(new Date(now.getTime() + 3600000)); // +1h por padrão
+    const tarefa = rawText.replace(/\b(daqui|amanhã|amanha|hoje|às?|da\s+(?:manhã|tarde|noite)|de\s+(?:manhã|tarde|noite))\b/gi, '').replace(/\s+/g,' ').trim() || rawText.trim();
+    return { tarefa, data_lembrete: dateStr, horario_lembrete: timeStr,
+             notify_date: dateStr, notify_time: timeStr, antecedencia: 'no momento', emoji: extractEmoji(rawText) };
+  }
 
-    // 1. Extrair modificador de notificação
-    const {text:evText, mod:notifyMod} = extractNotifyMod(rawText);
-    const t = evText.toLowerCase().trim();
+  async function parseWithChrono(rawText) {
+    if (!rawText || !rawText.trim()) return null;
 
-    // 2. Tempo relativo tem prioridade absoluta ("daqui X")
-    const rel = parseRelative(t);
-    if (rel) {
-      const notify = applyNotifyMod(rel.date, rel.time, notifyMod);
-      return {tarefa:buildTarefa(rawText), data_lembrete:rel.date, horario_lembrete:rel.time,
-              notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
-    }
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const nowHuman = `${now.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'})} ${localTimeStr(now)}`;
 
-    // 3. Data e hora independentes
-    const dateStr  = parseDatePart(t);
-    const timePart = parseTimePart(t);
-    let h=9, m=0, vague=true, ambiguous=false;
-    if (timePart) { h=timePart.h; m=timePart.m; vague=timePart.vague; ambiguous=!!timePart.ambiguous; }
+    try {
+      setFeedback("⏳ Interpretando...", "info");
+      const resp = await fetch(PARSE_AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: rawText, nowISO, nowHuman })
+      });
 
-    // 4. Ajustes para hoje
-    const isToday = dateStr===localDateStr(now);
-    if (isToday) {
-      // Hora ambígua (ex: "às 8" sem período) já passou → tenta PM
-      if (ambiguous && h>0 && h<13 && (h*60+m)<=nowMins) h+=12;
-      // Hora vaga (ex: "à noite") já passou → avança +1h
-      if (vague && (h*60+m)<=nowMins) {
-        const fut=new Date(Date.now()+3600000);
-        const nd=localDateStr(fut), nt=localTimeStr(fut);
-        const notify=applyNotifyMod(nd,nt,notifyMod);
-        return {tarefa:buildTarefa(rawText), data_lembrete:nd, horario_lembrete:nt,
-                notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
+      if (!resp.ok) throw new Error(`Servidor retornou ${resp.status}`);
+      const parsed = await resp.json();
+      if (parsed.error) throw new Error(parsed.error);
+
+      if (!parsed.dataHora || !parsed.titulo) throw new Error('JSON incompleto');
+
+      const eventDate = new Date(parsed.dataHora);
+      if (isNaN(eventDate.getTime())) throw new Error('Data inválida');
+
+      const data_lembrete    = localDateStr(eventDate);
+      const horario_lembrete = localTimeStr(eventDate);
+
+      let notify_date = data_lembrete;
+      let notify_time = horario_lembrete;
+      let antecedencia = 'no momento';
+
+      if (parsed.avisoMinutos && parsed.avisoMinutos > 0) {
+        const notifyDate = new Date(eventDate.getTime() - parsed.avisoMinutos * 60000);
+        notify_date  = localDateStr(notifyDate);
+        notify_time  = localTimeStr(notifyDate);
+        const mins   = parsed.avisoMinutos;
+        antecedencia = mins >= 1440 ? `${Math.round(mins/1440)} dia(s) antes`
+                     : mins >= 60   ? `${Math.round(mins/60)} hora(s) antes`
+                     :                `${mins} min antes`;
       }
-    }
 
-    const timeStr = `${p2(h)}:${p2(m)}`;
-    const notify = applyNotifyMod(dateStr, timeStr, notifyMod);
-    return {tarefa:buildTarefa(rawText), data_lembrete:dateStr, horario_lembrete:timeStr,
-            notify_date:notify.date, notify_time:notify.time, antecedencia:notify.label, emoji:extractEmoji(rawText)};
+      return {
+        tarefa: parsed.titulo.trim(),
+        data_lembrete, horario_lembrete,
+        notify_date, notify_time, antecedencia,
+        emoji: extractEmoji(rawText)
+      };
+
+    } catch(err) {
+      console.warn('[parseWithChrono] API falhou, usando fallback:', err.message);
+      setFeedback("⚠️ Sem conexão com IA — usando interpretação básica", "info");
+      await new Promise(r => setTimeout(r, 1500));
+      return _fallbackParse(rawText);
+    }
   }
 
   function p2(n) { return String(Math.round(n)).padStart(2,'0'); }
@@ -648,14 +437,14 @@
   }
 
   // ── SUBMIT ───────────────────────────────────────────────
-  function handleSubmit() {
+  async function handleSubmit() {
     const input = document.getElementById("inputText").value.trim();
     if (!input) return;
     const btn = document.getElementById("saveBtn");
-    btn.disabled = true; btn.textContent = "...";
+    btn.disabled = true; btn.textContent = "⏳";
     setFeedback("", "");
     try {
-      const parsed = parseWithChrono(input);
+      const parsed = await parseWithChrono(input);
       if (!parsed) {
         setFeedback("🤔 Não entendi. Pode repetir de outra forma? Ex: 'Reunião amanhã às 10h'", "error");
         return;
