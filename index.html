@@ -497,6 +497,7 @@
     t = t.replace(/\bdia\s+\d{1,2}(?:\s+de\s+\w+)?\b/gi,'');
     t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g,'');
     t = t.replace(/[àa]s?\s+\d{1,2}(?:[h:]\d{0,2})?(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))?/gi,'');
+    t = t.replace(/[àa]s?\s+[\wê]+(?:\s+e\s+\w+)?(?:\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite))/gi,'');
     t = t.replace(/\b\d{1,2}(?:h\d{2})?\s+(?:da?\s+|de\s+)?(?:manh[ãa]|tarde|noite|madrugada)\b/gi,'');
     t = t.replace(/\b(?:de\s+manh[ãa]|à?\s*noite|de\s+noite|ao\s+meio[\s-]?dia|meio[\s-]?dia|meia[\s-]?noite|cedinho|de\s+tardezinha|de\s+noitinha|de\s+manh[ãa]zinha|à?\s*tardinha|pela\s+tarde|à\s+tarde|semana\s+que\s+vem|pr[oó]xima\s+semana)\b/gi,'');
     for (const [name] of DIAS_SEMANA) t = t.replace(new RegExp(`\\b${name}\\b`,'gi'),'');
