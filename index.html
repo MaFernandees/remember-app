@@ -717,68 +717,6 @@
     return { text, mod: null };
   }
 
-  // ── PARSER PRINCIPAL ─────────────────────────────────────
-  // Retorna objeto de lembrete ou null se não entendeu
-  function parseWithChrono(rawText) {
-    // chrono-node v1: window.chrono com chrono.pt (sem .casual)
-    const chronoPT = (typeof chrono !== 'undefined') ? (chrono.pt || chrono.casual || chrono) : null;
-    if (!chronoPT || typeof chronoPT.parse !== 'function') throw new Error('Chrono.js não carregou. Verifique sua conexão e recarregue o app.');
-
-    // 1. Extrair instrução de notificação
-    const { text: textSemNotify, mod: notifyMod } = extractNotifyMod(rawText);
-
-    // 2. Pré-processar e parsear com Chrono
-    const processed = preprocessForChrono(textSemNotify);
-    const ref = new Date();
-    const results = chronoPT.parse(processed, ref, { forwardDate: true });
-
-    if (!results.length) {
-      console.warn('[parse] Chrono não encontrou data em:', processed);
-      return null;
-    }
-
-    const eventDate = results[0].start.date();
-    const { date: dateStr, time: timeStr } = fmtDate(eventDate);
-
-    // 3. Calcular notificação
-    let notifyDate = dateStr, notifyTime = timeStr, antecedencia = 'no momento';
-
-    if (notifyMod) {
-      if (notifyMod.type === 'daysBefore') {
-        const nd = new Date(eventDate);
-        nd.setDate(nd.getDate() - notifyMod.days);
-        notifyDate = fmtDate(nd).date;
-        notifyTime = '09:00';
-        antecedencia = notifyMod.label;
-      } else if (notifyMod.type === 'hoursBefore') {
-        const nd = new Date(eventDate.getTime() - notifyMod.hours * 3600000);
-        ({ date: notifyDate, time: notifyTime } = fmtDate(nd));
-        antecedencia = notifyMod.label;
-      } else if (notifyMod.type === 'specificTime') {
-        const notifyProcessed = preprocessForChrono(notifyMod.text);
-        const np = chronoPT.parse(notifyProcessed, ref, { forwardDate: true });
-        if (np && np.length) { notifyTime = fmtDate(np[0].start.date()).time; antecedencia = `às ${notifyTime}`; }
-      }
-    }
-
-    // 4. Limpar descrição da tarefa
-    let tarefa = rawText;
-    if (results[0].text) tarefa = tarefa.replace(results[0].text, '');
-    tarefa = tarefa
-      .replace(/,?\s*me\s+(?:lembr[ae][rm]?|avis[ae])[^,]*/gi, '')
-      .replace(/,?\s*(?:um\s+dia|uma\s+semana|uma\s+hora|dois\s+dias)\s+antes/gi, '')
-      .replace(/,?\s*na\s+v[eé]spera/gi, '')
-      .replace(/daqui(?:\s+a)?\s+[\wê\s]+?(?:hora[s]?|minutos?)(?:\s+e\s+(?:meia|\d+))?/gi, '')
-      .replace(/a\s+partir\s+de\s+[\wê\s]+?hora[s]?/gi, '')
-      .replace(/\b(?:hoje|amanhã|amanha|depois\s+de\s+amanhã|depois\s+de\s+amanha)\b/gi, '')
-      .replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
-    if (!tarefa || tarefa.length < 2) tarefa = rawText.trim();
-
-    return { tarefa, data_lembrete:dateStr, horario_lembrete:timeStr,
-             notify_date:notifyDate, notify_time:notifyTime,
-             antecedencia, emoji:extractEmoji(rawText) };
-  }
-
   // ── SCHEDULING ───────────────────────────────────────────
   function getNotifyDate(r) {
     const d = r.notify_date || r.data_lembrete;
