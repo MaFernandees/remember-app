@@ -71,6 +71,17 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(200,169,110,0.2); border-radius: 2px; }
+
+    /* ── Overlay de alarme ── */
+    #alarmOverlay { display:none; position:fixed; inset:0; z-index:9999; background:rgba(10,10,15,0.96); flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px 24px; }
+    #alarmOverlay.active { display:flex; }
+    .alarm-bell { font-size:72px; animation:alarmPulse 0.8s ease-in-out infinite; margin-bottom:16px; }
+    @keyframes alarmPulse { 0%,100%{transform:rotate(-15deg) scale(1)} 50%{transform:rotate(15deg) scale(1.1)} }
+    .alarm-label { font-size:11px; letter-spacing:0.35em; color:#c8a96e; text-transform:uppercase; margin-bottom:14px; }
+    .alarm-task { font-size:26px; color:#f0e8d8; font-style:italic; line-height:1.3; max-width:420px; margin-bottom:10px; }
+    .alarm-time { font-size:17px; color:#c8a96e; margin-bottom:52px; }
+    .alarm-ok-btn { background:linear-gradient(135deg,#c8a96e,#a07840); border:none; border-radius:18px; color:#0a0a0f; font-size:20px; font-weight:700; padding:18px 52px; cursor:pointer; font-family:'Georgia',serif; letter-spacing:0.04em; transition:transform 0.15s; }
+    .alarm-ok-btn:active { transform:scale(0.96); }
   </style>
 </head>
 <body>
@@ -143,7 +154,90 @@
   <div class="footer">REMEMBER © 2026 — ideia original de Marcos &nbsp;·&nbsp; <span id="appVer" style="color:#5a5040"></span></div>
 </div>
 
+<!-- Overlay de alarme — aparece quando o lembrete dispara com o app aberto -->
+<div id="alarmOverlay">
+  <div class="alarm-bell">🔔</div>
+  <div class="alarm-label">Lembrete</div>
+  <div class="alarm-task" id="alarmTask"></div>
+  <div class="alarm-time" id="alarmTime"></div>
+  <button class="alarm-ok-btn" onclick="dismissAlarm()">✓ Ok, entendido!</button>
+</div>
+
 <script>
+  // ════════════════════════════════════════════════════════
+  // SISTEMA DE ALARME — Web Audio API (gerado via código,
+  // sem arquivo externo: funciona 100% offline, volume
+  // progressivo, loop com pausa entre repetições)
+  // ════════════════════════════════════════════════════════
+  let _alarmRunning = false;
+  let _alarmVol = 0.15;       // começa baixo
+  let _alarmCycleTimer = null;
+  let _alarmCtx = null;
+
+  function _playAlarmCycle() {
+    if (!_alarmRunning) return;
+    try {
+      if (_alarmCtx) { try { _alarmCtx.close(); } catch(e){} }
+      _alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = _alarmCtx.currentTime;
+
+      // Padrão: 3 bipes (880 Hz → 1100 Hz → 880 Hz) com timbre suave
+      [[0, 880], [0.42, 1100], [0.84, 880]].forEach(([delay, freq]) => {
+        const osc  = _alarmCtx.createOscillator();
+        const gain = _alarmCtx.createGain();
+        osc.connect(gain); gain.connect(_alarmCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, t + delay);
+        gain.gain.linearRampToValueAtTime(_alarmVol, t + delay + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.38);
+        osc.start(t + delay);
+        osc.stop(t + delay + 0.42);
+      });
+
+      // Volume cresce a cada ciclo até máximo de 0.75
+      _alarmVol = Math.min(0.75, _alarmVol * 1.18);
+    } catch(e) {}
+
+    // Próximo ciclo em 2.4s (3 bipes ~1.26s + ~1.14s de silêncio)
+    _alarmCycleTimer = setTimeout(_playAlarmCycle, 2400);
+  }
+
+  function startAlarmSound() {
+    _alarmRunning = true;
+    _alarmVol = 0.15;
+    _playAlarmCycle();
+  }
+
+  function stopAlarmSound() {
+    _alarmRunning = false;
+    if (_alarmCycleTimer) { clearTimeout(_alarmCycleTimer); _alarmCycleTimer = null; }
+    if (_alarmCtx) { try { _alarmCtx.close(); } catch(e){} _alarmCtx = null; }
+  }
+
+  // ── Overlay visual ───────────────────────────────────────
+  function showAlarmOverlay(reminder) {
+    const overlay = document.getElementById('alarmOverlay');
+    document.getElementById('alarmTask').textContent = reminder.tarefa;
+    document.getElementById('alarmTime').textContent =
+      getRelativeLabel(reminder.data_lembrete) + ' às ' + reminder.horario_lembrete;
+    overlay.classList.add('active');
+  }
+
+  function hideAlarmOverlay() {
+    document.getElementById('alarmOverlay').classList.remove('active');
+  }
+
+  function triggerAlarm(reminder) {
+    startAlarmSound();
+    showAlarmOverlay(reminder);
+  }
+
+  function dismissAlarm() {
+    stopAlarmSound();
+    hideAlarmOverlay();
+  }
+
   // ── CONFIG ──────────────────────────────────────────────
   const EMAILJS_SERVICE_ID = "service_5i39okf";
   const EMAILJS_TEMPLATE_ID = "template_3u1kvpl";
@@ -241,7 +335,7 @@
   // PARSER v6 — 100% JavaScript puro, sem bibliotecas externas
   // Referência: hora local do device (GMT-3 para usuários BR)
   // ════════════════════════════════════════════════════════════
-  const APP_VERSION = "6.0";
+  const APP_VERSION = "7.0";
   console.log("Remember v" + APP_VERSION + " ✓");
 
   // ── Helpers de display ───────────────────────────────────
@@ -352,26 +446,51 @@
     navigator.serviceWorker.register('/sw.js')
       .then(reg => { swRegistration = reg; console.log("SW registrado:", reg.scope); })
       .catch(e => console.error("Erro SW:", e));
+
+    // Mensagens vindas do Service Worker
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (!e.data) return;
+      if (e.data.type === 'STOP_ALARM') {
+        dismissAlarm();
+      } else if (e.data.type === 'OPEN_REMINDER') {
+        const r = reminders.find(r => String(r.id) === String(e.data.reminderId));
+        if (r) triggerAlarm(r);
+      }
+    });
   }
 
   function showNotificationViaSW(reminder) {
-    const title = `${reminder.emoji} Remember`, body = reminder.tarefa, tag = `reminder-${reminder.id}`;
-    if (swRegistration && swRegistration.active) { swRegistration.active.postMessage({ type: 'SHOW_NOTIFICATION', title, body, tag }); return; }
-    if ("Notification" in window && Notification.permission === "granted") {
-      try { new Notification(title, { body, tag, requireInteraction: true, vibrate: [200,100,200] }); return; } catch(e) {}
+    const title = `🔔 ${reminder.tarefa}`;
+    const body  = `${getRelativeLabel(reminder.data_lembrete)} às ${reminder.horario_lembrete}`;
+    const tag   = `alarm-${reminder.id}`;
+    const data  = { reminderId: reminder.id, taskTitle: reminder.tarefa, taskTime: body };
+    if (swRegistration && swRegistration.active) {
+      swRegistration.active.postMessage({ type: 'SHOW_NOTIFICATION', title, body, tag, data });
+      return;
     }
-    setFeedback(`🔔 LEMBRETE: ${body}`, "info");
+    if ("Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body, tag, requireInteraction: true, vibrate: [500,200,500,200,500] }); return; } catch(e) {}
+    }
+    setFeedback(`🔔 LEMBRETE: ${reminder.tarefa}`, "info");
   }
 
   async function fireReminder(reminder) {
-    playNotificationSound();
+    // Dispara alarme visual+sonoro (app aberto)
+    triggerAlarm(reminder);
+
+    // Notificação (para quando a tela estiver bloqueada / app em segundo plano)
     const pushRegistered = localStorage.getItem("remember_push_registered");
     if (pushRegistered) {
       try {
-        const res = await fetch(SERVER_URL + "/notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: getUserId(), title: reminder.emoji + " Remember", body: reminder.tarefa }) });
+        const res = await fetch(SERVER_URL + "/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: getUserId(), reminderId: String(reminder.id), title: `🔔 ${reminder.tarefa}`, body: `${getRelativeLabel(reminder.data_lembrete)} às ${reminder.horario_lembrete}`, time: `${getRelativeLabel(reminder.data_lembrete)} às ${reminder.horario_lembrete}` })
+        });
         if (!res.ok) throw new Error();
       } catch(e) { showNotificationViaSW(reminder); }
     } else { showNotificationViaSW(reminder); }
+
     const userEmail = getUserEmail();
     if (userEmail) {
       emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { to_email: userEmail, tarefa: reminder.tarefa, data_lembrete: formatDateBR(reminder.data_lembrete), horario_lembrete: reminder.horario_lembrete, emoji: reminder.emoji, antecedencia: reminder.antecedencia, name: "Marcos", email: userEmail }).catch(e => console.error("Erro email:", e));
@@ -517,6 +636,15 @@
     }
     const eb = document.getElementById("emailBanner"); if (eb) eb.style.display = "block";
     const ei = document.getElementById("userEmail"); if (ei && getUserEmail()) ei.value = getUserEmail();
+
+    // App aberto por toque numa notificação de alarme (?alarm=id)
+    const urlParams = new URLSearchParams(window.location.search);
+    const alarmId = urlParams.get('alarm');
+    if (alarmId) {
+      history.replaceState({}, '', '/');
+      const r = reminders.find(r => String(r.id) === alarmId);
+      if (r) triggerAlarm(r);
+    }
   }
 
   document.getElementById("appVer").textContent = "v" + APP_VERSION;
