@@ -174,11 +174,15 @@
   let _alarmCycleTimer = null;
   let _alarmCtx = null;
 
-  function _playAlarmCycle() {
+  async function _playAlarmCycle() {
     if (!_alarmRunning) return;
     try {
-      if (_alarmCtx) { try { _alarmCtx.close(); } catch(e){} }
-      _alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!_alarmCtx || _alarmCtx.state === 'closed') {
+        _alarmCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume se o browser suspendeu o contexto (tab em segundo plano)
+      if (_alarmCtx.state === 'suspended') await _alarmCtx.resume();
+
       const t = _alarmCtx.currentTime;
 
       // Padrão: 3 bipes (880 Hz → 1100 Hz → 880 Hz) com timbre suave
@@ -197,7 +201,7 @@
 
       // Volume cresce a cada ciclo até máximo de 0.75
       _alarmVol = Math.min(0.75, _alarmVol * 1.18);
-    } catch(e) {}
+    } catch(e) { console.warn('Alarm audio error:', e); }
 
     // Próximo ciclo em 2.4s (3 bipes ~1.26s + ~1.14s de silêncio)
     _alarmCycleTimer = setTimeout(_playAlarmCycle, 2400);
@@ -461,7 +465,7 @@
 
   function showNotificationViaSW(reminder) {
     const title = `🔔 ${reminder.tarefa}`;
-    const body  = `${getRelativeLabel(reminder.data_lembrete)} às ${reminder.horario_lembrete}`;
+    const body  = `${getRelativeLabel(reminder.data_lembrete)} às ${reminder.horario_lembrete} — Toque para ouvir o alarme`;
     const tag   = `alarm-${reminder.id}`;
     const data  = { reminderId: reminder.id, taskTitle: reminder.tarefa, taskTime: body };
     if (swRegistration && swRegistration.active) {
